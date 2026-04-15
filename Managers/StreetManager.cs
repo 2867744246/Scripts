@@ -10,7 +10,7 @@ public class StreetManager : MonoBehaviour
     public Transform cameraTransform;       // 相机的Transform（通常是主摄像机）
     
     [Tooltip("触发移动的提前量（相机距离道路边缘多少时触发）")]
-    public float moveThreshold = 50f;       // 触发移动的提前量（相机距离道路右边缘多少时触发）
+    public float moveThreshold = -30f;       // 触发移动的提前量（相机距离道路右边缘多少时触发）
 
     private Queue<Transform> streetBlocks = new Queue<Transform>(); // 改为队列，更适合循环回收
     private float triggerPositionX;          // 当前最左侧道路块的左边缘X坐标

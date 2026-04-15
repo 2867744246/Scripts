@@ -16,6 +16,11 @@ public class CarController : MonoBehaviour
     public Transform rearLeftWheelModel;
     public Transform rearRightWheelModel;
 
+    [Header("材质引用")]
+    public Renderer brakeLightRenderer;
+    [Tooltip("尾灯材质在Renderer中的索引（如果有多个材质）")]
+    public int brakeLightMaterialIndex = 1;
+
     [Header("车辆物理参数")]
     public float maxMotorTorque = 800f;
     public float maxSteerAngle = 30f;
@@ -42,6 +47,7 @@ public class CarController : MonoBehaviour
     private Rigidbody rb;
     private float currentMotorTorque; // 当前平滑后的扭矩
     private float currentSpeed; // 当前速度 (km/h)
+    private MaterialPropertyBlock brakeLightBlock;
 
     /// <summary>
     /// 获取当前速度（只读）
@@ -56,70 +62,33 @@ public class CarController : MonoBehaviour
         
         // 2. 初始化所有车轮悬挂，防止弹跳
         //InitializeAllWheelColliders();
+
+        // 3. 初始化尾灯MaterialPropertyBlock
+        if (brakeLightRenderer != null)
+        {
+            brakeLightBlock = new MaterialPropertyBlock();
+        }
     }
 
     void FixedUpdate()
     {
+        // 1. 获取输入
+        GetInput(out float verticalInput, out float horizontalInput, out bool isBrake);
 
-        // 1. 获取输入（优先使用移动输入管理器，否则回退到键盘）
-        float verticalInput;
-        float horizontalInput;
-        bool isBrake;
+        // 2. 应用扭矩和速度限制
+        ApplyMotorTorque(verticalInput);
 
-        // 优化输入读取：先缓存键盘输入，优先使用有效的键盘值，否则使用移动输入（仅当存在且有效）
-        float kbVertical = Input.GetAxis("Vertical");
-        float kbHorizontal = Input.GetAxis("Horizontal");
-        bool kbBrake = Input.GetKey(KeyCode.Space);
+        // 3. 应用转向
+        ApplySteering(horizontalInput);
 
-        const float EPS = 0.001f; // 阈值，避免浮点噪声导致判断失灵
-
-        if (Mathf.Abs(kbVertical) > EPS)
-            verticalInput = kbVertical;
-        else if (mobileInput != null && Mathf.Abs(mobileInput.throttle) > EPS)
-            verticalInput = mobileInput.throttle;
-        else
-            verticalInput = 0f;
-
-        if (Mathf.Abs(kbHorizontal) > EPS)
-            horizontalInput = kbHorizontal;
-        else if (mobileInput != null && Mathf.Abs(mobileInput.steer) > EPS)
-            horizontalInput = mobileInput.steer;
-        else
-            horizontalInput = 0f;
-
-        isBrake = kbBrake || (mobileInput != null && mobileInput.handbrake);
-        
-        // 2. 平滑扭矩计算 (解决动力突增导致的抬头/打滑)
-        float targetTorque = verticalInput * maxMotorTorque;
-        //currentMotorTorque = Mathf.Lerp(currentMotorTorque, targetTorque, Time.fixedDeltaTime * torqueRampSpeed);
-        currentMotorTorque = targetTorque;
-
-        // 2.5. 速度限制逻辑：如果达到最大速度且继续加速，则减少扭矩
-        currentSpeed = rb.velocity.magnitude * 3.6f; // m/s -> km/h
-        
-        if (currentSpeed >= maxSpeed && verticalInput > 0)
-        {
-            // 当达到最大速度时，只允许维持速度，不允许继续加速
-            currentMotorTorque = Mathf.Min(currentMotorTorque, rb.drag * maxSpeed / 3.6f);
-        }
-
-        // 3. 应用后轮驱动
-        rearLeftWheelCollider.motorTorque = currentMotorTorque;
-        rearRightWheelCollider.motorTorque = currentMotorTorque;
-
-        // 4. 应用前轮转向
-        float steerAngle = horizontalInput * maxSteerAngle;
-        frontLeftWheelCollider.steerAngle = steerAngle;
-        frontRightWheelCollider.steerAngle = steerAngle;
-
-        // 5. 处理刹车
+        // 4. 处理刹车
         ApplyBraking(isBrake);
 
-        // 6. 应用防侧倾稳定 (可选，让过弯更稳定)
+        // 5. 应用防侧倾稳定 (可选，让过弯更稳定)
         //ApplyAntiRollBar(frontLeftWheelCollider, frontRightWheelCollider);
         //ApplyAntiRollBar(rearLeftWheelCollider, rearRightWheelCollider);
         
-        // 7. 更新 UI 显示
+        // 6. 更新 UI 显示
         UpdateSpeedUI();
     }
 
@@ -166,6 +135,69 @@ public class CarController : MonoBehaviour
     }
 
     /// <summary>
+    /// 获取输入（优先使用移动输入管理器，否则回退到键盘）
+    /// </summary>
+    void GetInput(out float verticalInput, out float horizontalInput, out bool isBrake)
+    {
+        // 优化输入读取：先缓存键盘输入，优先使用有效的键盘值，否则使用移动输入（仅当存在且有效）
+        float kbVertical = Input.GetAxis("Vertical");
+        float kbHorizontal = Input.GetAxis("Horizontal");
+        bool kbBrake = Input.GetKey(KeyCode.Space);
+
+        const float EPS = 0.001f; // 阈值，避免浮点噪声导致判断失灵
+
+        if (Mathf.Abs(kbVertical) > EPS)
+            verticalInput = kbVertical;
+        else if (mobileInput != null && Mathf.Abs(mobileInput.throttle) > EPS)
+            verticalInput = mobileInput.throttle;
+        else
+            verticalInput = 0f;
+
+        if (Mathf.Abs(kbHorizontal) > EPS)
+            horizontalInput = kbHorizontal;
+        else if (mobileInput != null && Mathf.Abs(mobileInput.steer) > EPS)
+            horizontalInput = mobileInput.steer;
+        else
+            horizontalInput = 0f;
+
+        isBrake = kbBrake || (mobileInput != null && mobileInput.handbrake);
+    }
+
+    /// <summary>
+    /// 应用扭矩和速度限制
+    /// </summary>
+    void ApplyMotorTorque(float verticalInput)
+    {
+        // 平滑扭矩计算 (解决动力突增导致的抬头/打滑)
+        float targetTorque = verticalInput * maxMotorTorque;
+        //currentMotorTorque = Mathf.Lerp(currentMotorTorque, targetTorque, Time.fixedDeltaTime * torqueRampSpeed);
+        currentMotorTorque = targetTorque;
+
+        // 速度限制逻辑：如果达到最大速度且继续加速，则减少扭矩
+        currentSpeed = rb.velocity.magnitude * 3.6f; // m/s -> km/h
+        
+        if (currentSpeed >= maxSpeed && verticalInput > 0)
+        {
+            // 当达到最大速度时，只允许维持速度，不允许继续加速
+            currentMotorTorque = Mathf.Min(currentMotorTorque, rb.drag * maxSpeed / 3.6f);
+        }
+
+        // 应用后轮驱动
+        rearLeftWheelCollider.motorTorque = currentMotorTorque;
+        rearRightWheelCollider.motorTorque = currentMotorTorque;
+    }
+
+    /// <summary>
+    /// 应用转向
+    /// </summary>
+    void ApplySteering(float horizontalInput)
+    {
+        float steerAngle = horizontalInput * maxSteerAngle;
+        frontLeftWheelCollider.steerAngle = steerAngle;
+        frontRightWheelCollider.steerAngle = steerAngle;
+    }
+
+    /// <summary>
     /// 处理刹车逻辑
     /// </summary>
     void ApplyBraking(bool isBrake)
@@ -175,10 +207,15 @@ public class CarController : MonoBehaviour
         frontRightWheelCollider.brakeTorque = brake;
         rearLeftWheelCollider.brakeTorque = brake;
         rearRightWheelCollider.brakeTorque = brake;
-    }
 
-    /// <summary>
-    /// 简单的防倾杆模拟，在过弯时增加稳定性
+        // 控制尾灯Emission
+        if (brakeLightRenderer != null && brakeLightBlock != null)
+        {
+            
+            brakeLightBlock.SetColor("_EmissionColor", isBrake ? Color.white : Color.black);
+            brakeLightRenderer.SetPropertyBlock(brakeLightBlock, brakeLightMaterialIndex);
+        }
+    }
     /// </summary>
     void ApplyAntiRollBar(WheelCollider leftWheel, WheelCollider rightWheel)
     {
@@ -236,27 +273,6 @@ public class CarController : MonoBehaviour
         Vector3 pos;
         Quaternion rot;
         collider.GetWorldPose(out pos, out rot);
-        // 简化逻辑：视觉模型与碰撞体已分离（推荐层级），直接同步世界位置与旋转。
-        // 下面保留旧逻辑作为注释备份，以便回滚或调试。
-
-        /*
-        // 旧逻辑：根据模型与碰撞体的关系选择不同的同步策略
-        bool sameObject = model == collider.transform || model.gameObject == collider.gameObject;
-        bool modelIsChildOfCollider = model.IsChildOf(collider.transform);
-        bool colliderIsChildOfModel = collider.transform.IsChildOf(model);
-
-        if (sameObject || modelIsChildOfCollider || colliderIsChildOfModel)
-        {
-            // 只更新旋转（包括转向/悬挂带来的角度），不要写入位置
-            model.rotation = rot;
-        }
-        else
-        {
-            // 标准情况：独立的视觉模型，更新位置与旋转
-            model.position = pos;
-            model.rotation = rot;
-        }
-        */
 
         // 新逻辑（直接同步世界变换）：视觉模型与 WheelCollider 已分离，安全设置世界位置/旋转
         model.position = pos;

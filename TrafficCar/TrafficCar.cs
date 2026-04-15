@@ -42,6 +42,7 @@ public partial class TrafficCar : MonoBehaviour, IPoolable
     
     [Tooltip("道路全局方向（默认 X 轴正方向）")]
     public Vector3 roadDirection = Vector3.right;
+    public LayerMask carLayer;
     
     [Header("车道设置")]
     [Tooltip("当前车道（-1:左，1:右）")]
@@ -53,92 +54,48 @@ public partial class TrafficCar : MonoBehaviour, IPoolable
     [Tooltip("变道间隔时间（秒）")]
     public float laneChangeInterval = 3f;
     
+
     [Header("引用")]
     public LaneSystem laneSystem;
 
+    [Header("车轮碰撞体引用")]
+    public WheelCollider frontLeftWheelCollider;
+    public WheelCollider frontRightWheelCollider;
+    public WheelCollider rearLeftWheelCollider;
+    public WheelCollider rearRightWheelCollider;
+
+    [Header("轮子模型引用（用于同步旋转）")]
+    public Transform frontLeftWheelModel;
+    public Transform frontRightWheelModel;
+    public Transform rearLeftWheelModel;
+    public Transform rearRightWheelModel;
+
+    [Header("材质引用")]
+    public Renderer brakeLightRenderer;
+    [Tooltip("尾灯材质在Renderer中的索引（如果有多个材质）")]
+    public int brakeLightMaterialIndex = 1;
+
     [Header("State Machine")]
-    [Tooltip("Minimum state hold time (seconds)")]
+    [Tooltip("状态最小保持时间(秒)")]
     public float minStateHoldTime = 0.2f;
 
-    [Tooltip("Follow enter distance (meters)")]
+    [Tooltip("跟随进入距离(米)")]
     public float followEnterDistance = 14f;
 
-    [Tooltip("Follow exit distance (meters, should be larger than enter distance)")]
+    [Tooltip("跟随退出距离(米,应大于进入距离)")]
     public float followExitDistance = 18f;
 
-    [Tooltip("Emergency brake distance (meters)")]
+    [Tooltip("紧急刹车距离(米)")]
     public float emergencyBrakeDistance = 5f;
 
-    [Tooltip("Lane change cooldown time (seconds)")]
+    [Tooltip("变道冷却时间(秒)")]
     public float laneChangeCooldown = 2f;
 
-    [Tooltip("Lane change lateral speed (m/s)")]
+    [Tooltip("变道横向速度(米/秒)")]
     public float laneChangeLateralSpeed = 4f;
 
     #endregion
 
-    #region 状态机类型定义
-
-    // 私有变量
-    #endregion
-
-    #region IPoolable 生命周期
-
-    /// <summary>
-    /// Main behavior state for the vehicle.
-    /// </summary>
-    private enum CarBehaviorState
-    {
-        Cruise,
-        Follow,
-        LaneChange,
-        EmergencyBrake
-    }
-
-    /// <summary>
-    /// Longitudinal motion mode.
-    /// </summary>
-    private enum LongitudinalMode
-    {
-        Cruise,
-        Follow,
-        EmergencyBrake
-    }
-
-    /// <summary>
-    /// Lateral motion mode.
-    /// </summary>
-    private enum LateralMode
-    {
-        None,
-        LaneChange
-    }
-
-    /// <summary>
-    /// Read-only perception data built in Sense phase.
-    /// </summary>
-    private struct CarPerception
-    {
-        public bool hasFrontCar;
-        public float frontCarDistance;
-        public bool isCurrentLaneBlocked;
-        public bool canChangeLane;
-        public int desiredLane;
-        public bool shouldAttemptLaneChange;
-    }
-
-    /// <summary>
-    /// Command built in Decide phase and executed in Act phase.
-    /// </summary>
-    private struct CarCommand
-    {
-        public float targetSpeed;
-        public int targetLane;
-        public LongitudinalMode longitudinalMode;
-        public LateralMode lateralMode;
-    }
-
-    #endregion
 
     #region 运行时字段
 
@@ -154,7 +111,7 @@ public partial class TrafficCar : MonoBehaviour, IPoolable
     private CarCommand cachedCommand;
     
     // 组件缓存
-    public LayerMask carLayer;
+    private MaterialPropertyBlock brakeLightBlock;
 
     #endregion
 
@@ -176,6 +133,12 @@ public partial class TrafficCar : MonoBehaviour, IPoolable
             laneSystem = FindObjectOfType<LaneSystem>();
         }
 
+        // 初始化尾灯MaterialPropertyBlock
+        if (brakeLightRenderer != null)
+        {
+            brakeLightBlock = new MaterialPropertyBlock();
+        }
+
         ResetStateMachineData(baseSpeed);
     }
     
@@ -185,6 +148,12 @@ public partial class TrafficCar : MonoBehaviour, IPoolable
         
         // // 平滑移动到目标车道位置
         // if (isChangingLane)
+    }
+    
+    void LateUpdate()
+    {
+        // 同步所有车轮模型的位置和旋转
+        UpdateWheelModels();
     }
     
     void FixedUpdate()
@@ -204,24 +173,36 @@ public partial class TrafficCar : MonoBehaviour, IPoolable
         // 应用速度（统一按道路方向移动）
     }
 
+    /// <summary>
+    /// 在编辑器中绘制 BoxCast 检测走廊的可视化表示
+    /// </summary>
     void OnDrawGizmos()
     {
         // 可视化 BoxCast 检测走廊
+        // 获取标准化的道路前进方向向量
         Vector3 direction = GetNormalizedRoadDirection();
+        // 获取 BoxCast 的半尺寸
         Vector3 halfExtents = GetBoxHalfExtents();
-        Vector3 boxOrigin = transform.position + Vector3.up * detectHeightOffset + direction * boxHalfLength;
+        // 计算 BoxCast 的起始位置:从车辆中心向上偏移一定高度
+        Vector3 boxOrigin = transform.position + Vector3.up * detectHeightOffset;
+        // 计算 BoxCast 的中心位置
         Vector3 castCenter = boxOrigin + direction * detectDistance;
         
         Gizmos.color = Color.red;
         Gizmos.matrix = Matrix4x4.identity;
+        // 绘制 BoxCast 的边框
         Gizmos.DrawWireCube(boxOrigin, halfExtents * 2f);
+        // 绘制 BoxCast 的中心线
         Gizmos.DrawLine(boxOrigin, castCenter);
+        // 绘制 BoxCast 的中心立方体
         Gizmos.DrawWireCube(castCenter, halfExtents * 2f);
 
         if (isChangingLane)
         {
             Gizmos.color = Color.cyan;
+            // 绘制变道目标的线段
             Gizmos.DrawLine(transform.position, laneTargetPosition);
+            // 绘制变道目标的球体
             Gizmos.DrawSphere(laneTargetPosition, 0.25f);
         }
     }
@@ -361,133 +342,39 @@ public partial class TrafficCar : MonoBehaviour, IPoolable
         ResetStateMachineData(baseSpeed);
         
     }
-    #endregion
     
-    #region Legacy 兼容方法（仅保留，不参与主流程）
     /// <summary>
-    /// 更新变道逻辑
+    /// 同步所有车轮模型的位置和旋转
     /// </summary>
-    void LegacyUpdateLaneChange()
+    void UpdateWheelModels()
     {
-        if (isChangingLane || Time.time < nextLaneChangeTime) return;
-        
-        // 随机决定是否变道
-        if (Random.value < laneChangeProbability)
-        {
-            LegacyTryChangeLane();
-        }
-        
-        nextLaneChangeTime = Time.time + laneChangeInterval;
+        UpdateWheelModel(frontLeftWheelCollider, frontLeftWheelModel);
+        UpdateWheelModel(frontRightWheelCollider, frontRightWheelModel);
+        UpdateWheelModel(rearLeftWheelCollider, rearLeftWheelModel);
+        UpdateWheelModel(rearRightWheelCollider, rearRightWheelModel);
     }
     
     /// <summary>
-    /// 尝试变换车道
+    /// 同步轮子视觉模型与物理碰撞体的位置和旋转
     /// </summary>
-    void LegacyTryChangeLane()
+    void UpdateWheelModel(WheelCollider collider, Transform model)
     {
-        if (laneSystem == null) return;
-        
-        // 切换到另一个车道
-        int newLane = -currentLane;
-        
-        // 获取新车道的目标位置
-        float targetX = laneSystem.GetLanePosition(newLane);
-        laneTargetPosition = new Vector3(targetX, transform.position.y, transform.position.z);
-        
-        // 检查新车道是否安全（简单检测：目标位置附近没有其他车）
-        if (!LegacyIsLaneSafe(newLane, targetX))
-        {
-            return;
-        }
-        
-        // 开始变道
-        currentLane = newLane;
-        isChangingLane = true;
-    }
-    
-    /// <summary>
-    /// 检查新车道是否安全
-    /// </summary>
-    bool LegacyIsLaneSafe(int laneIndex, float targetX)
-    {
-        // 简化的安全检测：检查目标点前后是否有车
-        float checkDistance = 8f;
-        
-        RaycastHit hitFront, hitBack;
-        bool hasCarFront = Physics.Raycast(transform.position, Vector3.right, out hitFront, checkDistance, carLayer);
-        bool hasCarBack = Physics.Raycast(transform.position, Vector3.left, out hitBack, checkDistance, carLayer);
-        
-        // 如果前后都有车，不变道
-        if (hasCarFront || hasCarBack)
-        {
-            return false;
-        }
-        
-        return true;
-    }
-    
-    /// <summary>
-    /// 平滑移动到车道目标位置
-    /// </summary>
-    void LegacySmoothMoveToLaneTarget()
-    {
-        Vector3 targetPos = laneTargetPosition;
-        Vector3 direction = (targetPos - transform.position).normalized;
-        
-        // 横向移动速度
-        float lateralSpeed = 5f;
-        transform.position += direction * lateralSpeed * Time.deltaTime;
-        
-        // 检查是否到达目标
-        if (Vector3.Distance(transform.position, targetPos) < 0.1f)
-        {
-            transform.position = new Vector3(targetPos.x, transform.position.y, targetPos.z);
-            isChangingLane = false;
-        }
-    }
-    
-    /// <summary>
-    /// 检测前方车辆并调整跟车速度
-    /// </summary>
-    void LegacyDetectAndAdjustSpeed()
-    {
-        Vector3 direction = GetNormalizedRoadDirection();
-        Vector3 halfExtents = GetBoxHalfExtents();
-        Vector3 boxOrigin = transform.position + Vector3.up * detectHeightOffset + direction * boxHalfLength;
-        
-        RaycastHit hit;
-        bool hasHit = Physics.BoxCast(
-            boxOrigin,
-            halfExtents,
-            direction,
-            out hit,
-            Quaternion.identity,
-            detectDistance,
-            carLayer,
-            QueryTriggerInteraction.Ignore);
-        
-        // 防止误命中自身或侧后方目标
-        bool hasValidFrontCar = hasHit &&
-                                hit.collider != null &&
-                                hit.collider.gameObject != gameObject &&
-                                Vector3.Dot((hit.point - boxOrigin).normalized, direction) > 0f;
-        
-        if (hasValidFrontCar)
-        {
-            float distance01 = Mathf.Clamp01(hit.distance / Mathf.Max(0.01f, detectDistance));
-            float targetSpeed = Mathf.Lerp(minSpeed, baseSpeed, distance01);
-            float speedChangeRate = GetSpeedChangeRate();
-            currentSpeed = Mathf.MoveTowards(currentSpeed, targetSpeed, speedChangeRate * Time.fixedDeltaTime);
-        }
-        else
-        {
-            // 前方无障碍，恢复巡航速度
-            LegacyRestoreSpeed();
-        }
-        
-        currentSpeed = Mathf.Clamp(currentSpeed, minSpeed, maxSpeed);
-    }
+        if (collider == null || model == null) return;
 
+        Vector3 pos;
+        Quaternion rot;
+        collider.GetWorldPose(out pos, out rot);
+        
+        // 同步世界位置与旋转
+        model.position = pos;
+        model.rotation = rot;
+
+        // 叠加轮子自转（绕本地 X 轴），使用 rpm -> deg/s = rpm*6
+        float degPerSec = collider.rpm * 6f;
+        model.Rotate(Vector3.right, degPerSec * Time.deltaTime, Space.Self);
+    }
+    
     #endregion
     
+ 
 }
