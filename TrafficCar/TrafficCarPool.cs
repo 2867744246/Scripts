@@ -7,6 +7,8 @@ using UnityEngine;
 /// </summary>
 public class TrafficCarPool : MonoBehaviour
 {
+    public CarController player; // 玩家车辆引用，用于生成和回收位置参考
+
     [Header("对象池配置")]
     [Tooltip("车辆预制体引用")]
     public TrafficCar carPrefab;
@@ -55,8 +57,6 @@ public class TrafficCarPool : MonoBehaviour
     private float nextSpawnTime;
     private LaneSystem laneSystem;
     private Transform playerTransform;
-    private Transform despawnPoint; // 保留引用以防旧代码依赖，但优先使用动态计算
-    private Coroutine recycleCoroutine; // 保留以兼容，但现在由 recycler 管理
     
     /// <summary>
     /// 单例模式
@@ -109,8 +109,6 @@ public class TrafficCarPool : MonoBehaviour
             }
         }
         
-        // 获取玩家位置引用
-        CarController player = FindObjectOfType<CarController>();
         if (player != null)
         {
             playerTransform = player.transform;
@@ -118,7 +116,15 @@ public class TrafficCarPool : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("未找到玩家车辆，将使用固定位置生成！");
+            player = FindObjectOfType<CarController>();
+            if (player != null)            {
+                playerTransform = player.transform;
+                Debug.Log($"TrafficCarPool 已找到玩家：{player.name}");
+            }
+            else
+            {
+                Debug.LogWarning("未找到玩家车辆，将使用固定位置生成！");
+            }
         }
                 
         // 初始化生成器和回收器

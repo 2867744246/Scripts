@@ -25,10 +25,10 @@ public class LaneSystem : MonoBehaviour
     public Color lineColor = Color.yellow;
     
     /// <summary>
-    /// 获取指定车道的 X 坐标
+    /// 获取指定车道的中心 Z 坐标
     /// </summary>
     /// <param name="laneIndex">车道索引（-1: 左车道，1: 右车道）</param>
-    /// <returns>车道中心的世界坐标 X 值</returns>
+    /// <returns>车道中心的世界坐标值</returns>
     public float GetLanePosition(int laneIndex)
     {
         return roadCenterZ + (laneIndex * laneWidth / 2f);

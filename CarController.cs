@@ -36,12 +36,6 @@ public class CarController : MonoBehaviour
     [Tooltip("是否显示单位")]
     public bool showUnit = true;
 
-    [Header("高级控制")]
-    [Tooltip("扭矩平滑变化速度")]
-    public float torqueRampSpeed = 2f;
-    [Tooltip("防倾翻稳定系数")]
-    public float antiRollForce = 5000f;
-
     [Header("移动输入（可选，移动端按钮/摇杆）")]
     public MobileInputManager mobileInput;
 
@@ -191,6 +185,9 @@ public class CarController : MonoBehaviour
         if (isBrake && currentSpeed > minSpeed)
         {
             brake = brakeTorque;
+        }else
+        {
+            return;
         }
 
         frontLeftWheelCollider.brakeTorque = brake;
@@ -203,38 +200,6 @@ public class CarController : MonoBehaviour
         {
             brakeLightBlock.SetColor("_EmissionColor", isBrake ? Color.white : Color.black);
             brakeLightRenderer.SetPropertyBlock(brakeLightBlock, brakeLightMaterialIndex);
-        }
-    }
-    /// </summary>
-    void ApplyAntiRollBar(WheelCollider leftWheel, WheelCollider rightWheel)
-    {
-        if (leftWheel == null || rightWheel == null) return;
-
-        WheelHit hit;
-        float leftTravel = 1f;
-        float rightTravel = 1f;
-
-        bool leftGrounded = leftWheel.GetGroundHit(out hit);
-        if (leftGrounded)
-        {
-            leftTravel = (-leftWheel.transform.InverseTransformPoint(hit.point).y - leftWheel.radius) / leftWheel.suspensionDistance;
-        }
-
-        bool rightGrounded = rightWheel.GetGroundHit(out hit);
-        if (rightGrounded)
-        {
-            rightTravel = (-rightWheel.transform.InverseTransformPoint(hit.point).y - rightWheel.radius) / rightWheel.suspensionDistance;
-        }
-
-        float antiRollForceDelta = (leftTravel - rightTravel) * antiRollForce;
-
-        if (leftGrounded)
-        {
-            rb.AddForceAtPosition(leftWheel.transform.up * -antiRollForceDelta, leftWheel.transform.position);
-        }
-        if (rightGrounded)
-        {
-            rb.AddForceAtPosition(rightWheel.transform.up * antiRollForceDelta, rightWheel.transform.position);
         }
     }
 
