@@ -27,6 +27,8 @@ public class CarController : MonoBehaviour
     public float brakeTorque = 2000f;
     [Tooltip("最大速度限制 (km/h)")]
     public float maxSpeed = 150f; // km/h
+    [Tooltip("最低速度限制，低于该速度时车辆自动起步并阻止刹车将速度降得更低")]
+    public float minSpeed = 10f; // km/h
     
     [Header("UI 引用")]
     [Tooltip("可选：用于显示速度的 Text 组件")]
@@ -59,14 +61,19 @@ public class CarController : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         // 1. 设置一个更低、更靠前的重心，大幅提升稳定性
         rb.centerOfMass = new Vector3(0, -0.7f, -0.3f);
-        
-        // 2. 初始化所有车轮悬挂，防止弹跳
-        //InitializeAllWheelColliders();
+        // 增加角阻尼以减少旋转抖动
+        rb.angularDrag = 0.5f;
 
         // 3. 初始化尾灯MaterialPropertyBlock
         if (brakeLightRenderer != null)
         {
             brakeLightBlock = new MaterialPropertyBlock();
+        }
+
+        // 4. 确保最低速度合理
+        if (minSpeed < 0f)
+        {
+            minSpeed = 0f;
         }
     }
 
@@ -83,10 +90,6 @@ public class CarController : MonoBehaviour
 
         // 4. 处理刹车
         ApplyBraking(isBrake);
-
-        // 5. 应用防侧倾稳定 (可选，让过弯更稳定)
-        //ApplyAntiRollBar(frontLeftWheelCollider, frontRightWheelCollider);
-        //ApplyAntiRollBar(rearLeftWheelCollider, rearRightWheelCollider);
         
         // 6. 更新 UI 显示
         UpdateSpeedUI();
@@ -107,32 +110,6 @@ public class CarController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 停用
-    /// 初始化单个WheelCollider的悬挂参数，这是稳定性的基础
-    /// </summary>
-    void InitializeWheelCollider(WheelCollider wc)
-    {
-        if (wc == null) return;
-        
-        JointSpring suspensionSpring = wc.suspensionSpring;
-        suspensionSpring.spring = 45000f;      // 悬挂刚度
-        suspensionSpring.damper = 5000f;       // 阻尼系数
-        suspensionSpring.targetPosition = 0.35f; // 目标压缩位置，模拟车重下压
-        wc.suspensionSpring = suspensionSpring;
-        wc.suspensionDistance = 0.2f;          // 悬挂可移动总距离
-    }
-
-    /// <summary>
-    /// 初始化所有四个车轮的悬挂
-    /// </summary>
-    void InitializeAllWheelColliders()
-    {
-        InitializeWheelCollider(frontLeftWheelCollider);
-        InitializeWheelCollider(frontRightWheelCollider);
-        InitializeWheelCollider(rearLeftWheelCollider);
-        InitializeWheelCollider(rearRightWheelCollider);
-    }
 
     /// <summary>
     /// 获取输入（优先使用移动输入管理器，否则回退到键盘）
@@ -168,15 +145,21 @@ public class CarController : MonoBehaviour
     /// </summary>
     void ApplyMotorTorque(float verticalInput)
     {
-        // 平滑扭矩计算 (解决动力突增导致的抬头/打滑)
+        // 计算当前速度并准备扭矩
+        currentSpeed = rb.velocity.magnitude * 3.6f; // m/s -> km/h
         float targetTorque = verticalInput * maxMotorTorque;
-        //currentMotorTorque = Mathf.Lerp(currentMotorTorque, targetTorque, Time.fixedDeltaTime * torqueRampSpeed);
+
+        // 自动起步：如果速度低于最低速度且玩家没有主动加油，则给一个小扭矩使车辆自行启动
+        if (currentSpeed < minSpeed && verticalInput <= 0f)
+        {
+            float autoStartTorque = maxMotorTorque * 0.2f;
+            targetTorque = Mathf.Max(targetTorque, autoStartTorque);
+        }
+
         currentMotorTorque = targetTorque;
 
         // 速度限制逻辑：如果达到最大速度且继续加速，则减少扭矩
-        currentSpeed = rb.velocity.magnitude * 3.6f; // m/s -> km/h
-        
-        if (currentSpeed >= maxSpeed && verticalInput > 0)
+        if (currentSpeed >= maxSpeed && verticalInput > 0f)
         {
             // 当达到最大速度时，只允许维持速度，不允许继续加速
             currentMotorTorque = Mathf.Min(currentMotorTorque, rb.drag * maxSpeed / 3.6f);
@@ -202,7 +185,14 @@ public class CarController : MonoBehaviour
     /// </summary>
     void ApplyBraking(bool isBrake)
     {
-        float brake = isBrake ? brakeTorque : 0f;
+        float brake = 0f;
+
+        // 低于最低速度时禁止刹车，使车辆保持最低速度
+        if (isBrake && currentSpeed > minSpeed)
+        {
+            brake = brakeTorque;
+        }
+
         frontLeftWheelCollider.brakeTorque = brake;
         frontRightWheelCollider.brakeTorque = brake;
         rearLeftWheelCollider.brakeTorque = brake;
@@ -211,7 +201,6 @@ public class CarController : MonoBehaviour
         // 控制尾灯Emission
         if (brakeLightRenderer != null && brakeLightBlock != null)
         {
-            
             brakeLightBlock.SetColor("_EmissionColor", isBrake ? Color.white : Color.black);
             brakeLightRenderer.SetPropertyBlock(brakeLightBlock, brakeLightMaterialIndex);
         }
