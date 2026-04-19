@@ -14,6 +14,7 @@ public class MapIconButton : MonoBehaviour
 
     private void Awake()
     {
+        Debug.Log($"MapIconButton Awake, initial mapIndex: {mapIndex}, gameObject: {gameObject.name}");
         button = GetComponent<Button>();
         if (button != null)
         {
@@ -23,9 +24,14 @@ public class MapIconButton : MonoBehaviour
 
     private void OnClick()
     {
+        Debug.Log($"MapIconButton OnClick, mapIndex: {mapIndex}, flowManager: {flowManager}");
         if (flowManager != null)
         {
             flowManager.OnMapIconClicked(mapIndex);
+        }
+        else
+        {
+            Debug.LogWarning("flowManager is null in MapIconButton.OnClick");
         }
     }
 }

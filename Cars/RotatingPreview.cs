@@ -11,6 +11,11 @@ public class RotatingPreview : MonoBehaviour
     [Tooltip("是否启用旋转")]
     public bool enableRotation = true;
 
+    private void Start()
+    {
+        transform.Rotate(0f, 90f, 0f);
+    }
+    
     private void Update()
     {
         if (!enableRotation)

@@ -22,7 +22,6 @@ public class MenuFlowManager : MonoBehaviour
     [Header("地图选择面板")]
     public GameObject mapSelectPanel;
     public TextMeshProUGUI mapSelectNameText;
-    public TextMeshProUGUI mapConfirmButtonText;
 
     [Header("摄像机控制")]
     public Camera mainCamera;
@@ -36,6 +35,7 @@ public class MenuFlowManager : MonoBehaviour
     private GameSettings gameSettings;
     private int previewVehicleIndex;
     private int previewMapIndex;
+    private int currentPreviewVehicleIndex = -1;
     private GameObject currentPreviewInstance;
     private bool isCameraMoving;
     private Vector3 targetCameraPosition;
@@ -60,7 +60,7 @@ public class MenuFlowManager : MonoBehaviour
 
         ShowMainPanel();
         UpdateMainMenuUI();
-        UpdatePreviewModel();
+        UpdatePreviewModel(gameSettings.SelectedVehicle, previewVehicleIndex);
     }
 
     private void Update()
@@ -157,7 +157,7 @@ public class MenuFlowManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 地图图标被点击。
+    /// 地图图标被点击，直接选择该地图并返回主界面。
     /// </summary>
     /// <param name="mapIndex">图标对应地图索引。</param>
     public void OnMapIconClicked(int mapIndex)
@@ -166,7 +166,9 @@ public class MenuFlowManager : MonoBehaviour
             return;
 
         previewMapIndex = mapIndex;
-        UpdateMapSelectUI();
+        gameSettings.SetSelectedMap(mapIndex);
+        UpdateMainMenuUI();
+        ShowMainPanel();
     }
 
     /// <summary>
@@ -179,28 +181,7 @@ public class MenuFlowManager : MonoBehaviour
 
         gameSettings.SetSelectedVehicle(previewVehicleIndex);
         UpdateMainMenuUI();
-        UpdatePreviewModel();
-        ShowMainPanel();
-    }
-
-    /// <summary>
-    /// 确认选择当前地图并返回主界面。
-    /// </summary>
-    public void ConfirmMapSelection()
-    {
-        if (gameSettings == null)
-            return;
-
-        gameSettings.SetSelectedMap(previewMapIndex);
-        UpdateMainMenuUI();
-        ShowMainPanel();
-    }
-
-    /// <summary>
-    /// 车辆选择界面返回上一级，不提交当前预览选择。
-    /// </summary>
-    public void CancelVehicleSelection()
-    {
+        UpdatePreviewModel(gameSettings.SelectedVehicle, previewVehicleIndex);
         ShowMainPanel();
     }
 
@@ -209,6 +190,19 @@ public class MenuFlowManager : MonoBehaviour
     /// </summary>
     public void CancelMapSelection()
     {
+        ShowMainPanel();
+    }
+
+    /// <summary>
+    /// 车辆选择界面返回上一级，不提交当前预览选择。
+    /// </summary>
+    public void CancelVehicleSelection()
+    {
+        if (gameSettings != null)
+        {
+            previewVehicleIndex = gameSettings.selectedVehicleIndex;
+            UpdatePreviewModel(gameSettings.SelectedVehicle, previewVehicleIndex);
+        }
         ShowMainPanel();
     }
 
@@ -240,7 +234,7 @@ public class MenuFlowManager : MonoBehaviour
             vehicleConfirmButtonText.text = alreadySelected ? "已选择" : "选择";
         }
 
-        UpdatePreviewModel(vehicle);
+        UpdatePreviewModel(vehicle, previewVehicleIndex);
     }
 
     private void UpdateMapSelectUI()
@@ -252,11 +246,6 @@ public class MenuFlowManager : MonoBehaviour
         if (mapSelectNameText != null)
             mapSelectNameText.text = map.mapName;
 
-        if (mapConfirmButtonText != null)
-        {
-            bool alreadySelected = previewMapIndex == gameSettings.selectedMapIndex;
-            mapConfirmButtonText.text = alreadySelected ? "已选择" : "选择";
-        }
     }
 
     private VehicleInfo GetPreviewVehicle()
@@ -273,7 +262,7 @@ public class MenuFlowManager : MonoBehaviour
         return gameSettings.mapList[Mathf.Clamp(previewMapIndex, 0, gameSettings.mapList.Count - 1)];
     }
 
-    private void UpdatePreviewModel(VehicleInfo vehicle = null)
+    private void UpdatePreviewModel(VehicleInfo vehicle = null, int vehicleIndex = -1)
     {
         if (previewRoot == null)
             return;
@@ -281,19 +270,24 @@ public class MenuFlowManager : MonoBehaviour
         if (vehicle == null)
             vehicle = gameSettings?.SelectedVehicle;
 
+        if (vehicle == null || vehicle.previewPrefab == null)
+            return;
+
+        bool needRebuild = currentPreviewInstance == null || currentPreviewVehicleIndex != vehicleIndex;
+        if (!needRebuild)
+            return;
+
         if (currentPreviewInstance != null)
         {
             Destroy(currentPreviewInstance);
             currentPreviewInstance = null;
         }
 
-        if (vehicle == null || vehicle.previewPrefab == null)
-            return;
-
-        currentPreviewInstance = Instantiate(vehicle.previewPrefab, previewRoot);
+        currentPreviewInstance = Instantiate(vehicle.previewPrefab, previewRoot, false);
         currentPreviewInstance.transform.localPosition = Vector3.zero;
         currentPreviewInstance.transform.localRotation = Quaternion.identity;
         currentPreviewInstance.transform.localScale = Vector3.one;
+        currentPreviewVehicleIndex = vehicleIndex;
 
         // 确保预览模型有旋转组件
         if (currentPreviewInstance.GetComponent<RotatingPreview>() == null)

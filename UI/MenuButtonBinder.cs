@@ -22,7 +22,6 @@ public class MenuButtonBinder : MonoBehaviour
     public Button vehicleSelectBackButton;
 
     [Header("地图选择按钮")]
-    public Button mapConfirmButton;
     public Button mapSelectBackButton;
 
     private void Awake()
@@ -48,7 +47,6 @@ public class MenuButtonBinder : MonoBehaviour
         BindButton(vehicleConfirmButton, flowManager.ConfirmVehicleSelection);
         BindButton(vehicleSelectBackButton, flowManager.CancelVehicleSelection);
 
-        BindButton(mapConfirmButton, flowManager.ConfirmMapSelection);
         BindButton(mapSelectBackButton, flowManager.CancelMapSelection);
     }
 
