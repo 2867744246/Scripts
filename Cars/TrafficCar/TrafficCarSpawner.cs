@@ -27,7 +27,7 @@ public class TrafficCarSpawner
     /// <summary>
     /// 计算安全的生成位置
     /// </summary>
-    public Vector3 CalculateSpawnPosition()
+    public Vector3 CalculateSpawnPosition(int laneIndex)
     {
         float spawnX;
         float spawnY = spawnPositionY;
@@ -40,12 +40,17 @@ public class TrafficCarSpawner
 
             // 保持与玩家相同的 Y 和 Z(假设玩家在道路上)
             spawnY = playerTransform.position.y;
-            spawnZ = laneSystem.GetLanePosition(laneSystem.GetRandomLane());
+            spawnZ = laneSystem.GetLanePosition(laneIndex);
         }
         else
         {
             // 如果没有玩家引用，使用固定起点
             spawnX = spawnOffset;
+            // 即使没有玩家，也使用 laneSystem 计算 Z 坐标
+            if (laneSystem != null)
+            {
+                spawnZ = laneSystem.GetLanePosition(laneIndex);
+            }
         }
 
         Vector3 pos = new Vector3(spawnX, spawnY, spawnZ);
@@ -60,12 +65,16 @@ public class TrafficCarSpawner
     /// </summary>
     public void InitializeCar(TrafficCar car)
     {
+        // 先确定随机车道
+        int randomLane = laneSystem.GetRandomLane();
+        car.currentLane = randomLane;
+        
         // 随机速度差异
         float speedMultiplier = Random.Range(1f - speedVariation / 100f, 1f + speedVariation / 100f);
         car.Initialize(speedMultiplier);
 
-        // 设置位置
-        car.transform.position = CalculateSpawnPosition();
+        // 设置位置（使用确定的车道）
+        car.transform.position = CalculateSpawnPosition(randomLane);
         
         //检测生成位置周围是否有车辆
         if (Physics.CheckSphere(car.transform.position, 10f, LayerMask.GetMask("Vehicle")))

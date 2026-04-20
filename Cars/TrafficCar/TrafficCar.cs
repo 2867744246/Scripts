@@ -45,8 +45,8 @@ public partial class TrafficCar : MonoBehaviour, IPoolable
     public LayerMask carLayer;
     
     [Header("车道设置")]
-    [Tooltip("当前车道（-1:左，1:右）")]
-    public int currentLane = 1;
+    [Tooltip("当前车道（0:左车道，1:右车道）")]
+    public int currentLane = 0;
     
     [Tooltip("变道概率（0-1）")]
     public float laneChangeProbability = 0.3f;

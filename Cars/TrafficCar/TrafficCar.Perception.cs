@@ -11,7 +11,8 @@ public partial class TrafficCar
     CarPerception SenseEnvironment()
     {
         bool hasFrontCar = TryGetFrontCarDistance(out float frontDistance);
-        int desiredLane = -currentLane;
+        // 在两个车道之间切换：0 -> 1, 1 -> 0
+        int desiredLane = (currentLane == 0) ? 1 : 0;
 
         return new CarPerception
         {

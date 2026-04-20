@@ -1,5 +1,5 @@
 using UnityEngine;
-
+using Cinemachine;
 /// <summary>
 /// 地图场景初始化器。
 /// 进入地图场景后读取 GameSettings 中的车辆选择并实例化玩家车辆。
@@ -8,6 +8,8 @@ public class GameSceneInitializer : MonoBehaviour
 {
     [Tooltip("玩家车辆生成点，若为空则使用本对象位置。")]
     public Transform playerSpawnPoint;
+    [Tooltip("虚拟相机")]
+    public CinemachineVirtualCamera virtualCamera;
 
     private void Awake()
     {
@@ -31,7 +33,18 @@ public class GameSceneInitializer : MonoBehaviour
         }
 
         Transform spawn = playerSpawnPoint != null ? playerSpawnPoint : transform;
-        Instantiate(selectedVehicle.gamePrefab, spawn.position, spawn.rotation);
+        
+        GameObject playerVehicle = Instantiate(selectedVehicle.gamePrefab, spawn.position, spawn.rotation);
+        SetCameraFollow(playerVehicle.transform);
+        
         Time.timeScale = 1f;
+    }
+
+    private void SetCameraFollow(Transform target)
+    {
+        if (virtualCamera != null)
+        {
+            virtualCamera.Follow = target;
+        }
     }
 }

@@ -146,7 +146,7 @@ public class CarController : MonoBehaviour
         // 自动起步：如果速度低于最低速度且玩家没有主动加油，则给一个小扭矩使车辆自行启动
         if (currentSpeed < minSpeed && verticalInput <= 0f)
         {
-            float autoStartTorque = maxMotorTorque * 0.2f;
+            float autoStartTorque = maxMotorTorque * 1f;
             targetTorque = Mathf.Max(targetTorque, autoStartTorque);
         }
 
@@ -159,7 +159,9 @@ public class CarController : MonoBehaviour
             currentMotorTorque = Mathf.Min(currentMotorTorque, rb.drag * maxSpeed / 3.6f);
         }
 
-        // 应用后轮驱动
+        // 应用四轮驱动
+        frontLeftWheelCollider.motorTorque = currentMotorTorque;
+        frontRightWheelCollider.motorTorque = currentMotorTorque;
         rearLeftWheelCollider.motorTorque = currentMotorTorque;
         rearRightWheelCollider.motorTorque = currentMotorTorque;
     }
@@ -185,9 +187,6 @@ public class CarController : MonoBehaviour
         if (isBrake && currentSpeed > minSpeed)
         {
             brake = brakeTorque;
-        }else
-        {
-            return;
         }
 
         frontLeftWheelCollider.brakeTorque = brake;
