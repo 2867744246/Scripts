@@ -36,19 +36,35 @@ public class CarController : MonoBehaviour
     [Tooltip("是否显示单位")]
     public bool showUnit = true;
 
-    [Header("移动输入（可选，移动端按钮/摇杆）")]
+    [Header("移动输入（可选，移动端按钮）")]
     public MobileInputManager mobileInput;
+
+    // 已解析过移动端输入引用，避免重复查找
+    private bool mobileInputResolved;
 
     // 私有控制变量
     private Rigidbody rb;
     private float currentMotorTorque; // 当前平滑后的扭矩
     private float currentSpeed; // 当前速度 (km/h)
     private MaterialPropertyBlock brakeLightBlock;
+    private float lastFramePositionX; // 上一帧 X 坐标，用于计算行驶距离
+    private float distanceTraveled; // 累计行驶距离 (m)
+    private bool positionInitialized; // 是否已初始化位置记录
 
     /// <summary>
     /// 获取当前速度（只读）
     /// </summary>
     public float CurrentSpeed => currentSpeed;
+
+    /// <summary>
+    /// 获取累计行驶距离（单位：米）
+    /// </summary>
+    public float DistanceTraveled => distanceTraveled;
+
+    /// <summary>
+    /// 车辆发生碰撞时触发的事件。
+    /// </summary>
+    public System.Action onCollision;
 
     void Start()
     {
@@ -69,7 +85,27 @@ public class CarController : MonoBehaviour
         {
             minSpeed = 0f;
         }
+
+        // 尝试获取移动端输入对象，若 Inspector 未手动分配则自动查找
+        GetMobileInputManager();
     }
+
+    /// <summary>
+    /// 获取当前关联的移动端输入管理器。
+    /// 如果尚未分配，则在场景中查找第一个 MobileInputManager 实例并缓存。
+    /// </summary>
+    private void GetMobileInputManager()
+    {
+        if (mobileInput == null)
+            {
+                mobileInput = FindObjectOfType<MobileInputManager>();
+                if (mobileInput == null)
+                {
+                    Debug.LogWarning("CarController: 未在场景中找到 MobileInputManager 实例，移动端输入将不可用。");
+                }
+            }
+    }
+
 
     void FixedUpdate()
     {
@@ -84,7 +120,10 @@ public class CarController : MonoBehaviour
 
         // 4. 处理刹车
         ApplyBraking(isBrake);
-        
+
+        // 5. 累加行驶距离
+        UpdateDistanceTraveled();
+
         // 6. 更新 UI 显示
         UpdateSpeedUI();
     }
@@ -234,5 +273,38 @@ public class CarController : MonoBehaviour
         // 叠加轮子自转（绕本地 X 轴），使用 rpm -> deg/s = rpm*6
         float degPerSec = collider.rpm * 6f;
         model.Rotate(Vector3.right, degPerSec * Time.deltaTime, Space.Self);
+    }
+
+    /// <summary>
+    /// 累加行驶距离（沿 X 轴方向）。
+    /// 第一帧初始化上一帧位置，之后按 X 轴增量累加距离。
+    /// </summary>
+    private void UpdateDistanceTraveled()
+    {
+        float currentX = transform.position.x;
+
+        if (!positionInitialized)
+        {
+            lastFramePositionX = currentX;
+            positionInitialized = true;
+            return;
+        }
+
+        float deltaX = currentX - lastFramePositionX;
+        // 只累加正向移动（防止倒车减少距离）
+        if (deltaX > 0f)
+        {
+            distanceTraveled += deltaX;
+        }
+        lastFramePositionX = currentX;
+    }
+
+    /// <summary>
+    /// 碰撞检测回调，触发结算事件。
+    /// </summary>
+    /// <param name="collision">碰撞信息。</param>
+    private void OnCollisionEnter(Collision collision)
+    {
+        onCollision?.Invoke();
     }
 }

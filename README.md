@@ -20,6 +20,7 @@ Assets/Scripts
 |       `-- TrafficCarSpawner.cs
 |-- SceneManagers
 |   |-- GameSceneInitializer.cs
+|   |-- GameManager.cs
 |   |-- LaneSystem.cs
 |   |-- SideSceneManager.cs
 |   `-- StreetManager.cs
@@ -88,6 +89,9 @@ Assets/Scripts
 - `SceneManagers/GameSceneInitializer.cs`
   - 进入地图场景后读取 `GameSettings.SelectedVehicle`，实例化玩家车辆，并把 `CinemachineVirtualCamera.Follow` 指向玩家。
 
+- `SceneManagers/GameManager.cs`
+  - 游戏管理器：负责计分、暂停/恢复、碰撞结算与动态生成暂停/结算面板。
+
 - `SceneManagers/LaneSystem.cs`
   - 车道系统：管理车道数与车道宽度，提供 `GetLanePosition(laneIndex)` 用于计算车道中心 `Z`；支持编辑器 Gizmos 可视化车道线。
 
@@ -121,6 +125,9 @@ Assets/Scripts
 
 - `UI/MenuFlowManager.cs`
   - 菜单流程控制：主界面/车辆选择/地图选择面板切换；车辆预览实例化；相机在菜单视角之间平滑移动；开始游戏时 `LoadScene(sceneName)`。
+
+- `UI/ScoreDisplayManager.cs`
+  - 实时得分显示：从 `GameManager` 获取当前分数并更新 HUD 文本。
 
 - `UI/MenuButtonBinder.cs`
   - UI 按钮绑定：把场景中各按钮统一绑定到 `MenuFlowManager` 的公开方法，减少手动连线错误。
